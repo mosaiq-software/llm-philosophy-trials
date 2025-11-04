@@ -14,4 +14,4 @@ Each trial/experiment can be found below, accompanied by a brief description of 
 
 | Trial Name | Description |
 | -------- | ------------ |
-| More info | coming soon! |
+| Recycled Synthetic Data as Input | An LLM will be asked an initial complex science question, and its response will be saved. A new instance of the model will be queried with the same question, but the previous response will be attached as a source. This experiment aims to show how small hallucinations can snowball and be easily perpetuated. |

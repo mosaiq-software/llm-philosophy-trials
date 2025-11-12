@@ -1,0 +1,10 @@
+venv/
+migrations/
+*.db
+
+env/
+.env
+
+temp_files/
+
+.DS_Store

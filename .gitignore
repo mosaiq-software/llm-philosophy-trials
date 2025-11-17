@@ -8,3 +8,5 @@ env/
 temp_files/
 
 .DS_Store
+
+notes/

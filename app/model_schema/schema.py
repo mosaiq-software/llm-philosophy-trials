@@ -1,119 +1,132 @@
 from datetime import date, datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
-class UserBase(BaseModel):
+# Auth & User
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class TokenPayload(BaseModel):
+    sub: str
     email: EmailStr
-    verified: bool
-    pseudonym: str = Field(..., max_length=100)
+    exp: Optional[int] = None
 
-class UserCreate(UserBase):
-    password: str = Field(..., min_length=8)
 
-class UserUpdate(BaseModel):
-    email: Optional[EmailStr] = None
-    pseudonym: Optional[str] = Field(None, max_length=100)
-    password: Optional[str] = Field(None, min_length=8)
+# Keep for the chance that we switch back to JSON instead of Forms
+# class UserCreate(BaseModel):
+#     email: EmailStr
+#     pseudonym: str = Field(..., max_length=100)
+#     password: str = Field(..., min_length=8)
 
-class UserRead(UserBase):
+
+class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    email: EmailStr
+    verified: bool
+    pseudonym: str
 
-class RateLimitingBase(BaseModel):
+
+# Keep for the chance that we switch back to JSON instead of Forms
+# class EmailVerificationCode(BaseModel):
+#     code: str = Field(..., min_length=6, max_length=64)
+
+
+# RateLimiting
+
+class RateLimitingRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    user_id: int
     tokens: int
     num_messages: int
     date: date
 
-class RateLimitingCreate(RateLimitingBase):
-    user_id: int
 
-class RateLimitingUpdate(BaseModel):
-    tokens: Optional[int] = None
-    num_messages: Optional[int] = None
+# Chat, Messages, & Highlights
 
-class RateLimitingRead(RateLimitingBase):
+class HighlightRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
-    user_id: int
-
-
-
-class HighlightBase(BaseModel):
+    chatmessage_id: int
     starting_index: int
     ending_index: int
     comment: Optional[str] = None
 
-class HighlightCreate(HighlightBase):
-    chatmessage_id: int
 
-class HighlightUpdate(BaseModel):
-    starting_index: Optional[int] = None
-    ending_index: Optional[int] = None
+class HighlightCreatePayload(BaseModel):
+    starting_index: int
+    ending_index: int
     comment: Optional[str] = None
 
-class HighlightRead(HighlightBase):
-    model_config = ConfigDict(from_attributes=True)
-    id: int
-    chatmessage_id: int
 
-
-
-class ChatMessageBase(BaseModel):
-    role: str = Field(..., max_length=50)
+class ChatMessageCreatePayload(BaseModel):
+    role: int = Field(..., ge=0, le=1, description="0=user, 1=model")
     content: str
+    highlights: Optional[List[HighlightCreatePayload]] = None
 
-class ChatMessageCreate(ChatMessageBase):
-    chat_id: int
 
-class ChatMessageUpdate(BaseModel):
-    role: Optional[str] = Field(None, max_length=50)
-    content: Optional[str] = None
-
-class ChatMessageRead(ChatMessageBase):
+class ChatMessageRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     chat_id: int
-
-class ChatMessageReadWithHighlights(ChatMessageRead):
+    role: int
+    content: str
     highlights: List[HighlightRead] = []
 
 
+class ChatHistoryPayload(BaseModel):
+    model_id: int
+    pretty_name: Optional[str] = None
+    messages: List[ChatMessageCreatePayload]
 
-class ChatBase(BaseModel):
+
+class ChatSaveRequest(BaseModel):
     title: str = Field(..., max_length=255)
-    model_name: str = Field(..., max_length=255)
-    starred: bool = False
-    is_public: bool = False
+    anonymous: bool = False
+    history: ChatHistoryPayload
 
-class ChatCreate(ChatBase):
-    owner_id: int
 
-class ChatUpdate(BaseModel):
-    title: Optional[str] = Field(None, max_length=255)
-    model_name: Optional[str] = Field(None, max_length=255)
-    starred: Optional[bool] = None
-    is_public: Optional[bool] = None
+class ChatSaveResponse(BaseModel):
+    success: bool = True
+    chat_id: int
 
-class ChatRead(ChatBase):
+
+class ChatPublishFromSavedRequest(BaseModel):
+    chat_id: int
+    new_title: str = Field(..., max_length=255)
+    anonymous: bool = False
+
+
+class ChatRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     owner_id: int
+    title: str
     slug: str
-    created_at: datetime
+    model_id: int
+    is_public: bool
+    anonymous: bool
     likes: int
+    created_at: datetime
     published_at: Optional[datetime] = None
-
-class ChatReadWithMessages(ChatRead):
-    messages: List[ChatMessageReadWithHighlights] = []
-
-# Additional User
-
-class UserReadWithChats(UserRead):
-    chats: List[ChatRead] = []
+    messages: List[ChatMessageRead] = []
 
 
-class UserReadWithChatsAndUsage(UserRead):
-    chats: List[ChatRead] = []
-    usage: List[RateLimitingRead] = []
+# OpenRouter API communication
+
+class ChatSubmitRequest(BaseModel):
+    model_id: int
+    prompt: str
+    sources_list: List[str] = []
+
+
+class ChatSubmitResponse(BaseModel):
+    model_id: int
+    response_text: str
+    tokens_used: int

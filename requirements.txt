@@ -2,3 +2,5 @@ python-dotenv
 fastapi[standard]
 sqlalchemy
 openai
+python-jose
+passlib

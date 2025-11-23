@@ -32,6 +32,11 @@ class User(Base):
         back_populates="owner",
         cascade="all, delete-orphan",
     )
+    starred_chats = relationship(
+        "ChatStar",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
     usage = relationship(
         "RateLimiting",
         back_populates="user",
@@ -63,6 +68,21 @@ class RateLimiting(Base):
         return (f"<RateLimiting id={self.id} user_id={self.user_id} date={self.date} tokens={self.tokens} num_messages={self.num_messages}>")
 
 
+class EmailVerificationToken(Base):
+    __tablename__ = "email_verification_tokens"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    token = Column(String(255), unique=True, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used = Column(Boolean, nullable=False, default=False)
+
+    user = relationship("User")
+
+    def __repr__(self) -> str:
+        return f"<EmailVerificationToken id={self.id} user_id={self.user_id} used={self.used}>"
+
+
 class Chat(Base):
     __tablename__ = "chats"
 
@@ -71,11 +91,11 @@ class Chat(Base):
     title = Column(String(255), nullable=False)
     model_id = Column(Integer, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False) # date first saved, not necessarily the same as 'published_at'
-    starred = Column(Boolean, nullable=False, default=False)
-    slug = Column(String(255), unique=True, index=True, nullable=False)
+    slug = Column(String(255), unique=True, index=True, nullable=False) # cleaned version of the title (shortened to a specific length, spaces/invalid characters removed, profanity censored)
 
     # Public posts only
     is_public = Column(Boolean, nullable=False, default=False, index=True)
+    anonymous = Column(Boolean, nullable=False, default=False) # post chat authored by 'users.pseudonym' or 'anonymous'
     likes = Column(Integer, nullable=False, default=0)
     published_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -87,9 +107,33 @@ class Chat(Base):
         cascade="all, delete-orphan",
         order_by="ChatMessage.id",
     )
+    stars = relationship(
+        "ChatStar",
+        back_populates="chat",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self) -> str:
         return f"<Chat id={self.id} title={self.title!r} owner_id={self.owner_id} public={self.is_public} likes={self.likes}>"
+
+
+# Join table to record which users have starred which chat
+class ChatStar(Base):
+    __tablename__ = "chat_stars"
+    __table_args__ = (
+        UniqueConstraint("user_id", "chat_id", name="uq_chat_star_user_chat"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    chat_id = Column(Integer, ForeignKey("chats.id"), nullable=False, index=True)
+
+    # RELATIONSHIPS
+    user = relationship("User", back_populates="starred_chats")
+    chat = relationship("Chat", back_populates="stars")
+
+    def __repr__(self) -> str:
+        return f"<ChatStar id={self.id} user_id={self.user_id} chat_id={self.chat_id}>"
 
 
 class ChatMessage(Base):
@@ -97,7 +141,7 @@ class ChatMessage(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     chat_id = Column(Integer, ForeignKey("chats.id"), nullable=False)
-    role = Column(String(50), nullable=False) # user or model?
+    role = Column(Integer, nullable=False) # user = 0, model = 1
     content = Column(Text, nullable=False)
 
     # RELATIONSHIPS

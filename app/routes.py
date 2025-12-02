@@ -1,10 +1,12 @@
+from email.message import EmailMessage
 import os
 import re
 import secrets
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+import smtplib
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status, Form
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Form, BackgroundTasks
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.templating import Jinja2Templates
@@ -89,6 +91,21 @@ def save_verification_token(db: Session, user_id: int, expires_minutes: int = 60
     db.commit()
     return code
 
+def send_verification_email(to_email: str, code: str):
+    msg = EmailMessage()
+    msg["Subject"] = "Hi bro, this is your verification code"
+    msg["From"] = conf.SMTP_USER
+    msg["To"] = to_email
+    msg.set_content(
+        f"Hi bro!\n\n"
+        f"Your verification code is: {code}\n\n"
+        f"It will expire in 24 hours.\n"
+    )
+
+    with smtplib.SMTP(conf.SMTP_SERVER, conf.SMTP_PORT) as server:
+        server.starttls()
+        server.login(conf.SMTP_USER, conf.SMTP_PASSWORD)
+        server.send_message(msg)
 
 def slugify(value: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9-]+", "-", value.lower()).strip("-")
@@ -180,8 +197,9 @@ def get_current_user_optional(
 
 # -------------------- Auth --------------------
 
+
 @router.post("/auth/signup", response_model=schemas.UserRead, status_code=status.HTTP_201_CREATED)
-def signup(email: EmailStr = Form(...), password: str = Form(...), pseudonym: str = Form(...), db: Session = Depends(get_db)):
+def signup(background_tasks: BackgroundTasks,email: EmailStr = Form(...), password: str = Form(...), pseudonym: str = Form(...), db: Session = Depends(get_db),):
     if get_user_by_email(db, email):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
 
@@ -195,7 +213,8 @@ def signup(email: EmailStr = Form(...), password: str = Form(...), pseudonym: st
     db.commit()
     db.refresh(user)
 
-    save_verification_token(db, user_id=user.id)
+    code = save_verification_token(db, user_id=user.id)
+    background_tasks.add_task(send_verification_email, user.email, code)
     return schemas.UserRead.model_validate(user)
 
 
@@ -221,7 +240,7 @@ def verify_email(code: str = Form(...), db: Session = Depends(get_db)):
     )
     if record is None or record.used:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid verification code")
-    if record.expires_at < datetime.now():
+    if record.expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification code expired")
 
     user = db.get(db_models.User, record.user_id)

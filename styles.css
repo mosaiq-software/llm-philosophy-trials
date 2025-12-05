@@ -1,0 +1,36 @@
+.container {
+  display: flex;
+  height: 100vh;
+}
+.left {
+  flex: 1 1 40%;
+  padding: 10px;
+  overflow: auto;
+  box-sizing: border-box;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.right {
+  flex: 1 1 60%;
+  padding: 10px;
+  overflow: auto;
+  box-sizing: border-box;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.model-selection {
+  width: 80%;
+  border: 2px solid black;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding : 10px;
+}
+.divider {
+  width: 5px;
+  background: rgb(0, 0, 0);
+  cursor: col-resize;
+  flex-shrink: 0;
+}

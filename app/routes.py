@@ -1,11 +1,13 @@
+from email.message import EmailMessage
 import os
 import re
 import secrets
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+import smtplib
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Form, BackgroundTasks
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.templating import Jinja2Templates
 from jose import JWTError, jwt
@@ -17,19 +19,14 @@ from sqlalchemy.orm import Session, joinedload, sessionmaker
 from app import models_list # Schema example: "1 : { "api_name" : "minimax/minimax-m2:free", "pretty_name" : "Minimax M2"}"
 from app.model_schema import models as db_models
 from app.model_schema import schema as schemas
+from app.model_schema.database import engine, SessionLocal
 from pydantic import EmailStr
 
 from config import Config as conf
 
 
-connect_args = {"check_same_thread": False} if conf.DATABASE_URL.startswith("sqlite") else {}
-engine = create_engine(conf.DATABASE_URL, connect_args=connect_args)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-db_models.Base.metadata.create_all(bind=engine)
-
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token", auto_error=False)
 templates = Jinja2Templates(directory="app/templates")
 router = APIRouter()
 
@@ -89,6 +86,21 @@ def save_verification_token(db: Session, user_id: int, expires_minutes: int = 60
     db.commit()
     return code
 
+def send_verification_email(to_email: str, code: str):
+    msg = EmailMessage()
+    msg["Subject"] = "LPT verification code"
+    msg["From"] = conf.SMTP_FROM        # some email services only allow you to send emails from verified addresses, which may be different from the generated address we use in 'smtp.login'
+    msg["To"] = to_email
+    msg.set_content(
+        f"Hi bro!\n\n"
+        f"Your verification code is: {code}\n\n"
+        f"It will expire in 24 hours.\n"
+    )
+
+    with smtplib.SMTP(conf.SMTP_SERVER, conf.SMTP_PORT) as server:
+        server.starttls()
+        server.login(conf.SMTP_USER, conf.SMTP_PASSWORD)
+        server.send_message(msg)
 
 def slugify(value: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9-]+", "-", value.lower()).strip("-")
@@ -141,12 +153,20 @@ def update_rate_limits(db: Session, user_id: int, tokens_used: int, message_incr
 
 
 # Equivalent purpose as 'login_required' decorator from Flask
-def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)) -> db_models.User:
+def get_current_user(
+    request: Request,
+    db: Session = Depends(get_db),
+    token: Optional[str] = Depends(oauth2_scheme),
+) -> db_models.User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    if token is None:
+        token = request.cookies.get("access_token")
+    if not token:
+        raise credentials_exception
     try:
         payload = jwt.decode(token, conf.JWT_SECRET, algorithms=[conf.JWT_ALGORITHM])
         user_id: str = payload.get("sub")
@@ -164,12 +184,13 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
 # Optional version used for page rendering, so that the user can be redirected rather than errored
 def get_current_user_optional(
     request: Request,
+    token: Optional[str] = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> Optional[db_models.User]:
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.lower().startswith("bearer "):
+    if token is None:
+        token = request.cookies.get("access_token")
+    if not token:
         return None
-    token = auth_header.split(" ", 1)[1]
     try:
         payload = jwt.decode(token, conf.JWT_SECRET, algorithms=[conf.JWT_ALGORITHM])
         user_id: str = payload.get("sub")
@@ -180,8 +201,9 @@ def get_current_user_optional(
 
 # -------------------- Auth --------------------
 
+
 @router.post("/auth/signup", response_model=schemas.UserRead, status_code=status.HTTP_201_CREATED)
-def signup(email: EmailStr = Form(...), password: str = Form(...), pseudonym: str = Form(...), db: Session = Depends(get_db)):
+def signup(background_tasks: BackgroundTasks, email: EmailStr = Form(...), password: str = Form(...), pseudonym: str = Form(...), db: Session = Depends(get_db),):
     if get_user_by_email(db, email):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
 
@@ -195,21 +217,33 @@ def signup(email: EmailStr = Form(...), password: str = Form(...), pseudonym: st
     db.commit()
     db.refresh(user)
 
-    save_verification_token(db, user_id=user.id)
+    code = save_verification_token(db, user_id=user.id)
+    background_tasks.add_task(send_verification_email, user.email, code)
     return schemas.UserRead.model_validate(user)
 
 
 @router.post("/auth/token", response_model=schemas.Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = get_user_by_email(db, form_data.username)
-    if user is None or not verify_password(form_data.password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email")
+    if not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password")
 
     if not user.verified:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Email not verified")
 
     access_token = create_access_token(data={"sub": str(user.id), "email": user.email})
-    return schemas.Token(access_token=access_token)
+    response_payload = schemas.Token(access_token=access_token)
+    response = JSONResponse(content=response_payload.model_dump())
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        samesite="lax",
+        secure=False,
+    )
+    return response
 
 
 @router.post("/auth/verify")
@@ -256,7 +290,7 @@ async def examples(request: Request):
 @router.get("/saved-chats", response_class=HTMLResponse)
 async def saved_chats(
     request: Request,
-    current_user: Optional[db_models.User] = Depends(get_current_user_optional),
+    current_user: db_models.User = Depends(get_current_user),
 ):
     if current_user is None:
         return RedirectResponse(url="/examples", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
@@ -264,7 +298,7 @@ async def saved_chats(
 
 
 # -------------------- Chat API --------------------
-
+# current_user: Optional[db_models.User] = Depends(get_current_user_optional),
 
 @router.post("/api/v1/chat/submit", response_model=schemas.ChatSubmitResponse)
 def submit_chat(

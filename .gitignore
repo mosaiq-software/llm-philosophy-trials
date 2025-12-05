@@ -10,4 +10,14 @@ temp_files/
 .DS_Store
 
 notes/
+
+app/model_schema/__pycache__
+
+app/__pycache__
+
+__pycache__
+
+config.py
+app/__init__.py
+
 test_script.py

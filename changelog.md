@@ -26,3 +26,13 @@
 - `/docs` directory added
     - Contains `example_schema.js`, which shows the structure of the `chats` array that will be present in the frontend, which holds all ongoing chats' JSON objects
     - `project_description.md` contains an AI-generated summary of the project purpose & design decisions; this is intended to be a more technical version of the primary `README.md` for developers
+
+# V0.4 - 12/4/25 - Auth Routes + Email Verification Working Successfully
+
+- Sam's PR merged into main branch
+    - Email verification working successfully
+    - Add email values to `.env`
+- Auth routes tested & working successfully (`/auth/signup`, `/auth/token`, `/auth/verify`)
+    - `/auth/token` now saves the JWT access token in a cookie
+- `bcrypt` version pushed back to `4.0.1` to fix compatibility issues with `passlib`
+    - Possibly switch to another cryptography library in the future (`argon2`, etc)

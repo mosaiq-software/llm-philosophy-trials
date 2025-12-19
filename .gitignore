@@ -11,13 +11,8 @@ temp_files/
 
 notes/
 
-app/model_schema/__pycache__
+**/__pycache__/
 
-app/__pycache__
-
-__pycache__
-
-config.py
 app/__init__.py
 
 test_script.py

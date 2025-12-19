@@ -2,14 +2,133 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Index Page!</title>
-    <style>
-        body { font-family: sans-serif; text-align: center; margin-top: 100px; }
-        h1 { color: #007acc; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Philosophy Trail</title>
+    <link rel="stylesheet" href="/styles.css">
 </head>
+
 <body>
-    <h1>This is the index page</h1>
-    <p>This page should load if the FastAPI application is working properly!</p>
+    <div class="header">
+        <div class="header-left">
+            <a href="/" class="logo">LLM Experiments</a>
+            <span class="trial-title">Trial #1: "Synthetic Data As Input"</span>
+        </div>
+        <div class="header-right">
+            <button class="btn-nav">Examples</button>
+            <button class="btn-nav">Saved Chats</button>
+            <button class="btn-info" id="infoBtn">ℹ️</button>
+            <div class="user-menu">AA</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Left Panel -->
+        <div class="left" id="left">
+            <div class="model-selection">
+                <label>Select a model:</label>
+                <div class="model-tabs" id="modelTabs">
+                    <button class="add-model" id="addModelBtn">+</button>
+                </div>
+                <div id="modelModal" class="modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2>Select a Model</h2>
+                            <button class="modal-close" id="closeModelModal">×</button>
+                        </div>
+                        <div class="modal-body">
+                            <p>Choose a model to start a conversation chain:</p>
+                            <div class="model-list">
+                                {% for model_id, details in models.items() %}
+                                <button class="btn-model-option" 
+                                        data-id="{{ model_id }}" 
+                                        data-name="{{ details.pretty_name }}">
+                                    {{ details.pretty_name }}
+                                </button>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-section">
+                <label id="chatLabel">Click the "+" above to add models to converse with!</label>
+                <textarea class="chat-input" placeholder="Type here to chat..."></textarea>
+
+                <div class="sources-section">
+                    <p>Responses to include as sources:</p>
+                    <div class="sources-list" id="sourcesList">
+                    </div>
+                </div>
+
+                <div class="response-section">
+                    <label>Model Response:</label>
+                    <div class="response-box">
+                        <p>Something something.</p>
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <label>Highlight text to add notes</label>
+                    <div class="button-group">
+                        <button class="btn-primary">Save Chat</button>
+                        <button class="btn-secondary">Publish Chat</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Divider -->
+        <div class="divider" id="divider"></div>
+
+        <!-- Right Panel -->
+        <div class="right" id="right">
+            <div class="timeline-section">
+                <h3>Timeline</h3>
+                <div class="timeline-container">
+                    <div class="timeline-node">
+                        <div class="node-label">Model #1</div>
+                    </div>
+                    <div class="timeline-node">
+                        <div class="node-label">Model 2</div>
+                    </div>
+                    <div class="timeline-node">
+                        <div class="node-label">Model 3</div>
+                    </div>
+                </div>
+
+                <div class="chat-flow">
+                    <div class="flow-item initial">
+                        <div class="flow-label">Initial Question</div>
+                        <div class="flow-box">Something something</div>
+                    </div>
+                    <div class="flow-connector">|</div>
+                    <div class="flow-item response">
+                        <div class="flow-label">Response #1</div>
+                        <div class="flow-box">
+                            Something something
+                            <div class="notes-label"></div>
+                        </div>
+                    </div>
+                    <div class="flow-connector">|</div>
+                    <div class="flow-ellipsis">...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="infoModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Information</h2>
+                <button class="modal-close" id="closeModal">×</button>
+            </div>
+            <div class="modal-body">
+                <p>Experiment description, purpose, methodology, and a brief tutorial on how to use the site will be listed here</p>
+                <div class="modal-arrow">→</div>
+                <p class="modal-note"></p>
+            </div>
+        </div>
+    </div>
+    <script src="/script.js"></script>
 </body>
 </html>

@@ -36,3 +36,12 @@
     - `/auth/token` now saves the JWT access token in a cookie
 - `bcrypt` version pushed back to `4.0.1` to fix compatibility issues with `passlib`
     - Possibly switch to another cryptography library in the future (`argon2`, etc)
+
+# V0.5 - 12/19/25 - Index HTML + Basic State Tracking
+
+- Sam's index page merged
+- State to keep track of:
+    - `chats`: list of JSON chat objects (schema in `docs/example_schema.js`)
+    - `activeChatIndex`: the index of the chat in `chats` that is currently selected
+    - `currentContext`: JSON with keys corresponding to the index of a message in a chat's `messages` list, and values corresponding to the content of that chat
+- **Currently WIP, recommended to wait until next push to test!

@@ -22,6 +22,8 @@ from app.model_schema import schema as schemas
 from app.model_schema.database import engine, SessionLocal
 from pydantic import EmailStr
 
+from openai import OpenAI
+
 from config import Config as conf
 
 
@@ -29,6 +31,11 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token", auto_error=False)
 templates = Jinja2Templates(directory="app/templates")
 router = APIRouter()
+
+or_client = OpenAI(
+  base_url="https://openrouter.ai/api/v1",
+  api_key=conf.SECRET_KEY,
+)
 
 
 def get_db():
@@ -150,6 +157,26 @@ def update_rate_limits(db: Session, user_id: int, tokens_used: int, message_incr
     usage.tokens += tokens_used
     usage.num_messages += message_increment
     db.commit()
+
+
+def call_openrouter(model_id: int, prompt: str):
+    model = models_list.get(model_id)["api_name"]
+
+    response = or_client.chat.completions.create(
+        model=model,
+        messages=[
+            { "role": "system", "content": "You are a helpful assistant." },
+            { "role": "user", "content": prompt }
+        ]
+    )
+
+    total_tokens = response.usage.total_tokens
+    prompt_tokens = response.usage.prompt_tokens
+    completion_tokens = response.usage.completion_tokens
+    response_text = response.choices[0].message.content
+    response_text = response_text or "" # if None
+
+    return response_text, total_tokens, prompt_tokens, completion_tokens
 
 
 # Equivalent purpose as 'login_required' decorator from Flask
@@ -298,7 +325,7 @@ async def saved_chats(
 
 
 # -------------------- Chat API --------------------
-# current_user: Optional[db_models.User] = Depends(get_current_user_optional),
+
 
 @router.post("/api/v1/chat/submit", response_model=schemas.ChatSubmitResponse)
 def submit_chat(
@@ -306,8 +333,7 @@ def submit_chat(
     db: Session = Depends(get_db),
     current_user: db_models.User = Depends(get_current_user),
 ):
-    model_info = models_list.get(payload.model_id)
-    if model_info is None:
+    if models_list.get(payload.model_id) is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown model_id")
 
     sources_text = "\n\n".join(payload.sources_list)
@@ -316,17 +342,15 @@ def submit_chat(
     # Check current token and message stats, do not update yet
     check_rate_limits(db, user_id=current_user.id)
 
-    # Make API call to OpenRouter here, obtain the model response and token usage
-    response_text = ...
-    tokens_used = ...
+    response_text, total_tokens_used, prompt_tokens_used, completion_tokens_used = call_openrouter(model_id=payload.model_id, prompt=combined_prompt)
 
-    update_rate_limits(db, user_id=current_user.id, tokens_used=tokens_used)
+    update_rate_limits(db, user_id=current_user.id, tokens_used=total_tokens_used)
 
-    response_text = f"{model_info.get('pretty_name', 'Model')} response to: {payload.prompt}"
     return schemas.ChatSubmitResponse(
         model_id=payload.model_id,
         response_text=response_text,
-        tokens_used=tokens_used,
+        prompt_tokens=prompt_tokens_used,
+        completion_tokens=completion_tokens_used
     )
 
 

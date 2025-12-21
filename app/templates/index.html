@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LLM Philosophy Trail</title>
-    <link rel="stylesheet" href="/styles.css">
+    <title>LLM Philosophy Trial</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}">
 </head>
 
 <body>
@@ -14,9 +14,9 @@
             <span class="trial-title">Trial #1: "Synthetic Data As Input"</span>
         </div>
         <div class="header-right">
-            <button class="btn-nav">Examples</button>
-            <button class="btn-nav">Saved Chats</button>
-            <button class="btn-info" id="infoBtn">ℹ️</button>
+            <button class="btn-nav" onclick="window.open('/examples', '_self')">Examples</button>
+            <button class="btn-nav" onclick="window.open('/saved-chats', '_self')">Saved Chats</button>
+            <button class="btn-info" id="infoBtn">About</button>
             <div class="user-menu">AA</div>
         </div>
     </div>
@@ -54,6 +54,7 @@
             <div class="chat-section">
                 <label id="chatLabel">Click the "+" above to add models to converse with!</label>
                 <textarea class="chat-input" placeholder="Type here to chat..."></textarea>
+                <button id="sendBtn" class="btn-primary" style="margin-top: 10px; width: 100%;">Send Message</button>
 
                 <div class="sources-section">
                     <p>Responses to include as sources:</p>
@@ -64,12 +65,11 @@
                 <div class="response-section">
                     <label>Model Response:</label>
                     <div class="response-box">
-                        <p>Something something.</p>
+                        <p><em>Model responses appear here...</em></p>
                     </div>
                 </div>
 
                 <div class="actions">
-                    <label>Highlight text to add notes</label>
                     <div class="button-group">
                         <button class="btn-primary">Save Chat</button>
                         <button class="btn-secondary">Publish Chat</button>
@@ -84,34 +84,25 @@
         <!-- Right Panel -->
         <div class="right" id="right">
             <div class="timeline-section">
-                <h3>Timeline</h3>
-                <div class="timeline-container">
-                    <div class="timeline-node">
-                        <div class="node-label">Model #1</div>
-                    </div>
-                    <div class="timeline-node">
-                        <div class="node-label">Model 2</div>
-                    </div>
-                    <div class="timeline-node">
-                        <div class="node-label">Model 3</div>
-                    </div>
-                </div>
+                <h2>Timeline</h2>
+                <br>
 
                 <div class="chat-flow">
-                    <div class="flow-item initial">
+                    <p id="timelineHide"><em>Start a conversation and the timeline will appear!</em></p>
+                    <!-- <div class="flow-connector">Iteration 1</div>                             HARD-CODED EXAMPLE
+                    <div class="flow-item">
                         <div class="flow-label">Initial Question</div>
                         <div class="flow-box">Something something</div>
+                        <div class="flow-label">Tokens used: 526 - Most common word: degree</div>
                     </div>
                     <div class="flow-connector">|</div>
-                    <div class="flow-item response">
+                    <div class="flow-item">
                         <div class="flow-label">Response #1</div>
-                        <div class="flow-box">
-                            Something something
-                            <div class="notes-label"></div>
-                        </div>
+                        <div class="flow-box">Something something</div>
+                        <div class="flow-label">Tokens used: X - Most common word: none</div>
                     </div>
-                    <div class="flow-connector">|</div>
-                    <div class="flow-ellipsis">...</div>
+                    <br>
+                    <div class="flow-connector">Iteration 2</div> -->
                 </div>
             </div>
         </div>
@@ -123,12 +114,12 @@
                 <button class="modal-close" id="closeModal">×</button>
             </div>
             <div class="modal-body">
-                <p>Experiment description, purpose, methodology, and a brief tutorial on how to use the site will be listed here</p>
+                <p>Experiment description, purpose, methodology, and a brief tutorial on how to use the site will be listed here! Delete later!</p>
                 <div class="modal-arrow">→</div>
                 <p class="modal-note"></p>
             </div>
         </div>
     </div>
-    <script src="/script.js"></script>
+    <script src="{{ url_for('static', path='script.js') }}"></script>
 </body>
 </html>

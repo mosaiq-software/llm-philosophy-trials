@@ -44,4 +44,12 @@
     - `chats`: list of JSON chat objects (schema in `docs/example_schema.js`)
     - `activeChatIndex`: the index of the chat in `chats` that is currently selected
     - `currentContext`: JSON with keys corresponding to the index of a message in a chat's `messages` list, and values corresponding to the content of that chat
-- **Currently WIP, recommended to wait until next push to test!
+
+# V0.6 - 12/21/25 - Index Page Progress
+
+- Most of the `index.html` page is implemented, except for the following:
+    - Markdown converter (will run in the backend right after the response is returned from OpenRouter)
+    - Highlight/comment system
+    - Save/publish chats
+        - Currently chats are fully static, unable to be saved in the database
+- **Again recommended to wait to test until the above features are fully implemented, next push within a day!

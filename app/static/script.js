@@ -1,4 +1,3 @@
-
 const divider = document.querySelector(".divider");
 const left = document.querySelector(".left");
 const right = document.querySelector(".right");
@@ -68,6 +67,8 @@ const modelOptions = document.querySelectorAll(".btn-model-option");
 const chatLabel = document.getElementById("chatLabel");
 const chatInput = document.querySelector(".chat-input");
 const sourcesList = document.getElementById("sourcesList");
+const sendBtn = document.getElementById("sendBtn");
+const responseBox = document.querySelector(".response-box");
 
 
 if (addModelBtn && modelModal) {
@@ -101,6 +102,103 @@ modelOptions.forEach(option => {
         modelModal.classList.remove("show");
     });
 });
+
+if (sendBtn) {
+    sendBtn.addEventListener("click", async () => {
+        if (activeChatIndex === -1) {
+            alert("Please select or add a model first!");
+            return;
+        }
+        
+        const text = chatInput.value;
+        if (!text.trim()) {
+            alert("Please enter a message.");
+            return;
+        }
+
+        const currentChat = chats[activeChatIndex];
+
+        // Convert currentContext (which is a JSON object) into an array of strings (expected by the API)
+        const sourcesArray = Object.values(currentContext);
+
+        const payload = {
+            model_id: currentChat.model_id,
+            prompt: text,
+            sources_list: sourcesArray
+        };
+
+        // chatInput.value = ""; // clear input box after sending a request?
+        responseBox.innerHTML = `<p><em>Thinking...</em></p>`;
+
+        sendBtn.disabled = true;
+        sendBtn.textContent = "Wait before sending another request";
+        sendBtn.style.cursor = "not-allowed";
+
+        try {
+            const res = await fetch('/api/v1/chat/submit', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) {
+                throw new Error(`Server error: ${res.statusText}`);
+            }
+
+            const data = await res.json();
+
+            currentChat.messages.push({
+                role: 0,
+                content: text,
+                tokens_used: data.prompt_tokens,
+                highlights: []
+            });
+
+            currentChat.messages.push({
+                role: 1,
+                content: data.response_text,
+                tokens_used: data.completion_tokens,
+                highlights: []
+            });
+
+            renderLastResponse(activeChatIndex);
+            renderSources(activeChatIndex);
+            renderTimeline(activeChatIndex);
+
+        } catch (error) {
+            console.error("Chat submission failed! Reason:", error);
+            responseBox.innerHTML = `<p style="color:red;">Error communicating with API: ${error.message}</p>`;
+        } finally {
+            sendBtn.disabled = false;
+            sendBtn.textContent = "Send Message";
+            sendBtn.style.cursor = "pointer";
+        }
+    });
+}
+
+function getMostCommonWord(text) {
+    if (!text) return "none";
+    // Match words, ignoring case and punctuation
+    const words = text.toLowerCase().match(/\b\w+\b/g);
+    if (!words) return "none";
+
+    const frequency = {};
+    let maxWord = words[0];
+    let maxCount = 0;
+
+    for (const w of words) {
+        if (w.length < 4) continue; // skip common words such as "the", "is", "as", etc
+        
+        frequency[w] = (frequency[w] || 0) + 1;
+        if (frequency[w] > maxCount) {
+            maxCount = frequency[w];
+            maxWord = w;
+        }
+    }
+    return maxWord;
+}
 
 function addNewChat(modelId, prettyName) {
     const newChat = {
@@ -170,6 +268,75 @@ function renderSources(chatIndex) {
     });
 }
 
+function renderLastResponse(index) {
+    const chat = chats[index];
+    if (!chat || !responseBox) return;
+
+    const lastModelMsg = chat.messages.slice().reverse().find(m => m.role === 1);
+
+    if (lastModelMsg) {
+        responseBox.innerHTML = lastModelMsg.content
+    } else {
+        // Default placeholder if no model response yet
+        responseBox.innerHTML = `<p><em>Model responses appear here...</em></p>`;
+    }
+}
+
+function renderTimeline(chatIndex) {
+    const container = document.querySelector(".chat-flow");
+    if (!container) return;
+
+    container.innerHTML = ""; // clear existing timeline
+    
+    const chat = chats[chatIndex];
+    if (!chat || !chat.messages) return;
+
+    chat.messages.forEach((msg, index) => {
+        const isUser = msg.role === 0;
+        const iteration = Math.ceil((index + 1) / 2);
+
+        if (isUser) {
+            const header = document.createElement("div");
+            header.className = "flow-connector";
+            header.textContent = `Iteration ${iteration}`;
+            container.appendChild(header);
+        }
+
+        const flowItem = document.createElement("div");
+        flowItem.className = "flow-item";
+        flowItem.classList.add(isUser ? "initial" : "response");
+
+        const label = document.createElement("div");
+        label.className = "flow-label";
+        label.textContent = isUser ? `Question #${iteration}` : `Response #${iteration}`;
+
+        const box = document.createElement("div");
+        box.className = "flow-box";
+        box.textContent = msg.content;
+
+        const stats = document.createElement("div");
+        stats.className = "flow-label";
+        const tokens = msg.tokens_used !== null ? msg.tokens_used : "Pending";
+        const commonWord = getMostCommonWord(msg.content);
+        stats.textContent = `Tokens used: ${tokens} - Most common word: ${commonWord}`;
+
+        flowItem.appendChild(label);
+        flowItem.appendChild(box);
+        flowItem.appendChild(stats);
+
+        container.appendChild(flowItem);
+
+        if (isUser) {
+            const connector = document.createElement("div");
+            connector.className = "flow-connector";
+            connector.textContent = "|";
+            container.appendChild(connector);
+        } else {
+            container.appendChild(document.createElement("br"));
+        }
+    });
+}
+
 function switchChat(index) {
     activeChatIndex = index;
     const currentChat = chats[index];
@@ -188,10 +355,12 @@ function switchChat(index) {
         chatLabel.textContent = `Ask your question to ${currentChat.pretty_name}:`;
     }
     if (chatInput) {
-        chatInput.value = ""; 
+        // chatInput.value = ""; // clear the input box?
         chatInput.focus();
     }
     renderSources(index);
+    renderLastResponse(index);
+    renderTimeline(index);
 
     console.log("Switched to chat:", activeChatIndex);
 }

@@ -13,24 +13,20 @@ client = OpenAI(
 
 # First API call with reasoning
 response = client.chat.completions.create(
-  model="minimax/minimax-m2:free",
+  model="allenai/olmo-3.1-32b-think:free",
   messages=[
           {
             "role": "user",
             "content": "How many r's are in the word 'strawberry'?"
           }
-        ],
-  extra_body={"reasoning": {"enabled": True}}
+        ]
 )
 
-print(response.choices[0].message.content)
-print("------------------------------------")
+total_tokens = response.usage.total_tokens
+model_tokens = response.usage.completion_tokens
 
 # Extract the assistant message with reasoning_details
 response = response.choices[0].message
-
-print(response.reasoning_details)
-print("------------------------------------")
 
 # Preserve the assistant message with reasoning_details
 messages = [
@@ -44,10 +40,14 @@ messages = [
 ]
 
 # Second API call - model continues reasoning from where it left off
-response2 = client.chat.completions.create(
-  model="minimax/minimax-m2:free",
-  messages=messages,
-  extra_body={"reasoning": {"enabled": True}}
-)
+# response2 = client.chat.completions.create(
+#   model="allenai/olmo-3.1-32b-think:free",
+#   messages=messages
+# )
 
-print(response2.choices[0].message.content)
+
+print(f"FIRST RESPONSE:\n\n\n{response.content}\n\n\n")
+print(f"TOTAL TOKENS: {total_tokens}, MODEL TOKENS: {model_tokens}")
+# print(f"FIRST REASONING:\n\n\n{response.reasoning_details}\n\n\n")
+# print(f"SECOND RESPONSE:\n\n\n{response2.choices[0].message.content}\n\n\n")
+# print(f"SECOND REASONING:\n\n\n{response2.choices[0].message.reasoning_details}\n\n\n")

@@ -129,4 +129,5 @@ class ChatSubmitRequest(BaseModel):
 class ChatSubmitResponse(BaseModel):
     model_id: int
     response_text: str
-    tokens_used: int
+    prompt_tokens: int
+    completion_tokens: int

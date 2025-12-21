@@ -5,7 +5,7 @@
 }
 
 body {
-  font-family: Arial, sans-serif;
+  font-family: sans-serif, Arial;
   background-color: #f5f5f5;
 }
 
@@ -14,7 +14,7 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 12px 20px;
-  background-color: #d4e8d4;
+  background-color: #c0e7c0;
   border-bottom: 2px solid #999;
 }
 
@@ -163,11 +163,11 @@ body {
 }
 
 .chat-input {
-  min-height: 100px;
+  min-height: 200px;
+  font-size: medium;
   padding: 10px;
   border: 2px solid #999;
   border-radius: 8px;
-  font-family: Arial, sans-serif;
   resize: vertical;
 }
 
@@ -347,13 +347,6 @@ body {
   text-align: center;
   color: #333;
   font-weight: bold;
-  margin-left: 20px;
-}
-
-.flow-ellipsis {
-  text-align: center;
-  color: #999;
-  font-size: 16px;
   margin-left: 20px;
 }
 

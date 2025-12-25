@@ -4,6 +4,7 @@ import re
 import secrets
 from datetime import date, datetime, timedelta, timezone
 import smtplib
+import markdown
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status, Form, BackgroundTasks
@@ -342,13 +343,18 @@ def submit_chat(
     # Check current token and message stats, do not update yet
     check_rate_limits(db, user_id=current_user.id)
 
-    response_text, total_tokens_used, prompt_tokens_used, completion_tokens_used = call_openrouter(model_id=payload.model_id, prompt=combined_prompt)
+    raw_response_text, total_tokens_used, prompt_tokens_used, completion_tokens_used = call_openrouter(model_id=payload.model_id, prompt=combined_prompt)
+
+    html_response_text = markdown.markdown(
+        raw_response_text, 
+        extensions=['fenced_code', 'nl2br'] # 'fenced_code' handles ```code``` blocks, 'nl2br' handles \n -> <br>
+    )
 
     update_rate_limits(db, user_id=current_user.id, tokens_used=total_tokens_used)
 
     return schemas.ChatSubmitResponse(
         model_id=payload.model_id,
-        response_text=response_text,
+        response_text=html_response_text,
         prompt_tokens=prompt_tokens_used,
         completion_tokens=completion_tokens_used
     )

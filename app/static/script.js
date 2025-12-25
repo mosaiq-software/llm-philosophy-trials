@@ -57,6 +57,10 @@ modelTabs.forEach((tab) => {
 let chats = [];
 let activeChatIndex = -1;
 let currentContext = {}
+let isHighlightMode = false;
+let viewedMessageIndex = -1;
+let pendingHighlightIndices = null;
+
 
 // Elements
 const addModelBtn = document.getElementById("addModelBtn");
@@ -69,6 +73,11 @@ const chatInput = document.querySelector(".chat-input");
 const sourcesList = document.getElementById("sourcesList");
 const sendBtn = document.getElementById("sendBtn");
 const responseBox = document.querySelector(".response-box");
+const highlightToggleBtn = document.getElementById("highlightToggleBtn");
+const highlightPopover = document.getElementById("highlightPopover");
+const highlightCommentInput = document.getElementById("highlightComment");
+const postHighlightBtn = document.getElementById("postHighlightBtn");
+const cancelHighlightBtn = document.getElementById("cancelHighlightBtn");
 
 
 if (addModelBtn && modelModal) {
@@ -163,6 +172,8 @@ if (sendBtn) {
                 highlights: []
             });
 
+            viewedMessageIndex = -1;
+
             renderLastResponse(activeChatIndex);
             renderSources(activeChatIndex);
             renderTimeline(activeChatIndex);
@@ -176,6 +187,130 @@ if (sendBtn) {
             sendBtn.style.cursor = "pointer";
         }
     });
+}
+
+if (highlightToggleBtn) {
+    highlightToggleBtn.addEventListener("click", () => {
+        // Validation: Can only highlight if we have a valid chat and message
+        const chat = chats[activeChatIndex];
+        if (!chat || chat.messages.length === 0) return;
+        
+        // Determine which message we are looking at
+        const msgIndex = viewedMessageIndex === -1 ? findLastModelMessageIndex(chat) : viewedMessageIndex;
+        if (msgIndex === -1 || chat.messages[msgIndex].role !== 1) {
+            alert("No model response available to highlight.");
+            return;
+        }
+
+        // Toggle state
+        isHighlightMode = !isHighlightMode;
+        
+        // UI Updates
+        responseBox.classList.toggle("highlight-mode", isHighlightMode);
+        highlightToggleBtn.textContent = isHighlightMode ? "Highlight Mode: ON" : "Highlight Mode: OFF";
+        highlightToggleBtn.classList.toggle("btn-primary", isHighlightMode);
+        highlightToggleBtn.classList.toggle("btn-secondary", !isHighlightMode);
+
+        // Reset popover if turning off
+        if (!isHighlightMode) {
+            hidePopover();
+        }
+    });
+}
+
+responseBox.addEventListener("mouseup", () => {
+    if (!isHighlightMode) return;
+
+    const selection = window.getSelection();
+    if (selection.isCollapsed) {
+        hidePopover();
+        return;
+    }
+
+    // Ensure selection is inside responseBox
+    if (!responseBox.contains(selection.anchorNode)) return;
+
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    
+    // Check limit (Max 10)
+    const chat = chats[activeChatIndex];
+    const msgIndex = viewedMessageIndex === -1 ? findLastModelMessageIndex(chat) : viewedMessageIndex;
+    if (chat.messages[msgIndex].highlights.length >= 10) {
+        alert("Maximum of 10 highlights reached. Mode toggled off.");
+        highlightToggleBtn.click(); // Programmatically turn off
+        selection.removeAllRanges();
+        return;
+    }
+
+    const rawIndices = getHtmlIndices(responseBox, range);
+    
+    if (!rawIndices) {
+        hidePopover();
+        return;
+    }
+
+    // 2. Adjust for overlaps
+    const adjusted = adjustHighlightIndices(
+        rawIndices.start, 
+        rawIndices.end, 
+        chat.messages[msgIndex].highlights
+    );
+
+    // 3. If the selection was invalid or fully overlapped, cancel the action
+    if (!adjusted) {
+        console.warn("Selection overlapped significantly with existing highlights. Action ignored.");
+        selection.removeAllRanges();
+        hidePopover();
+        return;
+    }
+
+    // 4. Store the VALIDATED indices and content for the Post button to use
+    pendingHighlightIndices = {
+        start: adjusted.start,
+        end: adjusted.end,
+        content: rawIndices.content // Keep the normalized content string
+    };
+
+    // Show Popover just below the selection
+    // We need to calculate position relative to the container or viewport
+    const containerRect = document.querySelector('.container').getBoundingClientRect();
+    
+    highlightPopover.style.top = `${rect.bottom - containerRect.top + window.scrollY + 10}px`;
+    highlightPopover.style.left = `${rect.left - containerRect.left + (rect.width / 2) - 125}px`; // Center it (125 is half popover width)
+    highlightPopover.classList.remove("hidden");
+    highlightCommentInput.focus();
+});
+
+cancelHighlightBtn.addEventListener("click", hidePopover);
+
+postHighlightBtn.addEventListener("click", () => {
+    if (!pendingHighlightIndices) return;
+
+    const comment = highlightCommentInput.value.trim();
+    
+    saveHighlightToState(
+        pendingHighlightIndices.start, 
+        pendingHighlightIndices.end, 
+        comment, 
+        pendingHighlightIndices.content
+    );
+
+    hidePopover();
+});
+
+function hidePopover() {
+    highlightPopover.classList.add("hidden");
+    highlightCommentInput.value = "";
+    pendingHighlightIndices = null;
+    window.getSelection().removeAllRanges();
+}
+
+function findLastModelMessageIndex(chat) {
+    for (let i = chat.messages.length - 1; i >= 0; i--) {
+        if (chat.messages[i].role === 1) return i;
+    }
+    return -1;
 }
 
 function getMostCommonWord(text) {
@@ -272,13 +407,23 @@ function renderLastResponse(index) {
     const chat = chats[index];
     if (!chat || !responseBox) return;
 
-    const lastModelMsg = chat.messages.slice().reverse().find(m => m.role === 1);
+    let msgIndex = viewedMessageIndex;
+    // No message was selected by the user, default to the most recent
+    if (msgIndex === -1) {
+        msgIndex = findLastModelMessageIndex(chat);
+    }
 
-    if (lastModelMsg) {
-        responseBox.innerHTML = lastModelMsg.content
+    if (msgIndex !== -1 && chat.messages[msgIndex]) {
+        const msg = chat.messages[msgIndex];
+        
+        const highlightedContent = applyHighlightsToHtml(msg.content, msg.highlights);
+        responseBox.innerHTML = highlightedContent;
+        
+        const label = document.querySelector(".response-section label");
+        const displayIndex = Math.ceil((msgIndex + 1) / 2);
+        label.textContent = `Model Response - Iteration ${displayIndex}:`;
     } else {
-        // Default placeholder if no model response yet
-        responseBox.innerHTML = `<p><em>Model responses appear here...</em></p>`;
+        responseBox.innerHTML = `<p><em>Model responses appear here...</em></p>`; // default placeholder
     }
 }
 
@@ -286,7 +431,7 @@ function renderTimeline(chatIndex) {
     const container = document.querySelector(".chat-flow");
     if (!container) return;
 
-    container.innerHTML = ""; // clear existing timeline
+    container.innerHTML = ""; // clear existing timeline before re-rendering, as highlights can be applied to any past messages
     
     const chat = chats[chatIndex];
     if (!chat || !chat.messages) return;
@@ -312,7 +457,7 @@ function renderTimeline(chatIndex) {
 
         const box = document.createElement("div");
         box.className = "flow-box";
-        box.textContent = msg.content;
+        box.innerHTML = msg.content;
 
         const stats = document.createElement("div");
         stats.className = "flow-label";
@@ -333,6 +478,28 @@ function renderTimeline(chatIndex) {
             container.appendChild(connector);
         } else {
             container.appendChild(document.createElement("br"));
+        }
+
+        if (!isUser) { // separate if block for easier testing purposes
+            const controls = document.createElement("div");
+            controls.className = "flow-controls";
+            controls.style.textAlign = "right";
+            controls.style.marginBottom = "5px";
+
+            const viewBtn = document.createElement("button");
+            viewBtn.textContent = "Add Highlights";
+            viewBtn.className = "btn-secondary";
+            viewBtn.style.fontSize = "0.7rem";
+            viewBtn.onclick = () => {
+                viewedMessageIndex = index; // 'renderLastResponse' below uses this global state
+                renderLastResponse(chatIndex);
+            };
+
+            // Highlights are viewable from the timeline boxes, but can only be added from response-box
+            box.innerHTML = applyHighlightsToHtml(msg.content, msg.highlights);
+
+            controls.appendChild(viewBtn);
+            flowItem.insertBefore(controls, box);
         }
     });
 }
@@ -363,4 +530,152 @@ function switchChat(index) {
     renderTimeline(index);
 
     console.log("Switched to chat:", activeChatIndex);
+}
+
+function getHtmlIndices(container, range) {
+    // Using 'Date.now()' to ensure each id is unique, possibly switch in the future to an RNG
+    const startId = "highlight-marker-start-" + Date.now();
+    const endId = "highlight-marker-end-" + Date.now();
+
+    const startMarker = document.createElement("span");
+    startMarker.id = startId;
+    startMarker.style.display = "none";
+
+    const endMarker = document.createElement("span");
+    endMarker.id = endId;
+    endMarker.style.display = "none";
+
+    const safeRange = range.cloneRange();
+    safeRange.insertNode(startMarker);
+    safeRange.collapse(false);
+    safeRange.insertNode(endMarker);
+
+    // Create a clone so that removing <span> highlight elements does not affect what is on the real displayed page
+    const clone = container.cloneNode(true);
+    const existingHighlights = clone.querySelectorAll('.highlight-span');
+    existingHighlights.forEach(span => {
+        while (span.firstChild) {
+            span.parentNode.insertBefore(span.firstChild, span);
+        }
+        span.parentNode.removeChild(span);
+    });
+
+    const htmlWithMarkers = clone.innerHTML;
+
+    const startRegex = new RegExp(`<span[^>]*id="${startId}"[^>]*>.*?<\/span>`, "i");
+    const endRegex = new RegExp(`<span[^>]*id="${endId}"[^>]*>.*?<\/span>`, "i");
+
+    const startMatch = htmlWithMarkers.match(startRegex);
+    const endMatch = htmlWithMarkers.match(endRegex);
+
+    let finalStart = -1;
+    let finalEnd = -1;
+
+    if (startMatch && endMatch) {
+        finalStart = startMatch.index;
+        finalEnd = endMatch.index - startMatch[0].length;
+    }
+
+    // Remove markers from real DOM
+    startMarker.remove();
+    endMarker.remove();
+
+    // Remove markers from clone DOM
+    const startInClone = clone.querySelector(`[id="${startId}"]`);
+    const endInClone = clone.querySelector(`[id="${endId}"]`);
+    if (startInClone) startInClone.remove();
+    if (endInClone) endInClone.remove();
+
+    const normalizedHtml = clone.innerHTML;
+
+    if (finalStart !== -1 && finalEnd !== -1) {
+        return { 
+            start: finalStart, 
+            end: finalEnd,
+            content: normalizedHtml // The clean HTML that should be stored inside of the database (the chats array)
+        };
+    }
+
+    return null;
+}
+
+function saveHighlightToState(start, end, comment, normalizedContent) {
+    const chat = chats[activeChatIndex];
+    const msgIndex = viewedMessageIndex === -1 ? findLastModelMessageIndex(chat) : viewedMessageIndex;
+    
+    if (msgIndex !== -1 && chat.messages[msgIndex]) {
+        // Update the saved message content with normalized HTML (from 'getHtmlIndicies' function)
+        chat.messages[msgIndex].content = normalizedContent;
+
+        chat.messages[msgIndex].highlights.push({
+            starting_index: start,
+            ending_index: end,
+            comment: comment
+        });
+
+        renderLastResponse(activeChatIndex);
+        renderTimeline(activeChatIndex);
+    }
+}
+
+function applyHighlightsToHtml(originalHtml, highlights) {
+    if (!highlights || highlights.length === 0) return originalHtml;
+
+    // Sort descending to insert highlight <span> tags from end to start (prevents index shifting)
+    const sorted = [...highlights].sort((a, b) => b.starting_index - a.starting_index);
+
+    let result = originalHtml;
+
+    sorted.forEach(h => {
+        if (h.starting_index < 0 || h.ending_index > result.length) return; // safety checks
+
+        const targetText = result.substring(h.starting_index, h.ending_index);
+
+        const commentAttr = h.comment ? `data-comment="${h.comment.replace(/"/g, '&quot;')}"` : '';
+        const openSpan = `<span class="highlight-span" ${commentAttr}>`;
+        const closeSpan = `</span>`;
+
+        // Handles when highlight tags cross existing tags (ie. <span></strong></span>)
+        // Solution: create a second highlight tag set so no overlapping occurs (ie. <span></span></strong><span></span>)
+        const safeTargetText = targetText.replace(/(<[^>]+>)/g, `${closeSpan}$1${openSpan}`);
+        const wrapper = `${openSpan}${safeTargetText}${closeSpan}`;
+
+        const before = result.substring(0, h.starting_index);
+        const after = result.substring(h.ending_index);
+
+        result = before + wrapper + after;
+    });
+
+    return result;
+}
+
+// Handles cases of new highlights overlapping existing ones
+function adjustHighlightIndices(start, end, existingHighlights) {
+    let newStart = start;
+    let newEnd = end;
+
+    for (const h of existingHighlights) {
+        // Case 1: Existing highlight is INSIDE the new selection.
+        if (h.starting_index >= newStart && h.ending_index <= newEnd) {
+            window.getSelection().removeAllRanges();
+            return null;
+        }
+
+        // Case 2: Overlap at the START of new selection
+        if (h.starting_index <= newStart && h.ending_index > newStart) {
+            newStart = h.ending_index;
+        }
+
+        // Case 3: Overlap at the END of new selection
+        if (h.starting_index < newEnd && h.ending_index >= newEnd) {
+            newEnd = h.starting_index;
+        }
+    }
+
+    if (newStart >= newEnd) { // safety check
+        window.getSelection().removeAllRanges();
+        return null;
+    }
+
+    return { start: newStart, end: newEnd };
 }

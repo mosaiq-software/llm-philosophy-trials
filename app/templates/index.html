@@ -63,9 +63,25 @@
                 </div>
 
                 <div class="response-section">
-                    <label>Model Response:</label>
-                    <div class="response-box">
+                    <div class="response-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <label>Model Response:</label>
+                        <div class="highlight-controls">
+                            <button id="highlightToggleBtn" class="btn-secondary" style="padding: 2px 8px; font-size: 0.8rem;">
+                                Highlight Mode: OFF
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="response-box" id="responseBox">
                         <p><em>Model responses appear here...</em></p>
+                    </div>
+
+                    <div id="highlightPopover" class="popover hidden">
+                        <textarea id="highlightComment" placeholder="Add a comment (optional)..."></textarea>
+                        <div class="popover-actions">
+                            <button id="cancelHighlightBtn" class="btn-nav">Cancel</button>
+                            <button id="postHighlightBtn" class="btn-primary">Post</button>
+                        </div>
                     </div>
                 </div>
 

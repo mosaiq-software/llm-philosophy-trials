@@ -14,7 +14,7 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 12px 20px;
-  background-color: #c0e7c0;
+  background-color: #90ef90;
   border-bottom: 2px solid #999;
 }
 
@@ -337,6 +337,38 @@ body {
   min-height: 60px;
 }
 
+/* Rendering of HTML fragments inside of response-box and flow-box (timeline boxes) */
+
+.response-box ul, .response-box ol,
+.flow-box ul, .flow-box ol {
+    padding-left: 25px;
+    margin-top: 10px;
+    margin-bottom: 10px;
+    list-style-position: outside;
+}
+
+.response-box ul, .flow-box ul {
+    list-style-type: disc;
+}
+
+.response-box li, .flow-box li {
+    margin-bottom: 5px;
+}
+
+.response-box hr, .flow-box hr {
+    border: none;
+    border-top: 1px solid #e0e0e0;
+    margin: 24px 0;
+}
+
+.response-box h1, .response-box h2, .response-box h3,
+.flow-box h1, .flow-box h2, .flow-box h3 {
+    margin-top: 20px;
+    margin-bottom: 10px;
+    font-weight: 600;
+}
+
+
 .notes-label {
   font-size: 11px;
   color: #666;
@@ -362,6 +394,69 @@ body {
 
 .btn-info:hover {
   background-color: #a0a0a0;
+}
+
+.highlight-mode {
+    cursor: text;
+}
+
+.highlight-span {
+    background-color: #ffeeba;
+    border-bottom: 2px solid #ffc107;
+    cursor: pointer;
+    position: relative;
+}
+
+.highlight-span:hover::after {
+    content: attr(data-comment);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    color: #fff;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 1000;
+    pointer-events: none;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.popover {
+    position: absolute;
+    background: white;
+    border: 1px solid #ddd;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    padding: 10px;
+    border-radius: 6px;
+    z-index: 100;
+    width: 250px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.popover.hidden {
+    display: none;
+}
+
+.popover textarea {
+    width: 100%;
+    height: 60px;
+    resize: none;
+    padding: 5px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.9rem;
+}
+
+.popover-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 5px;
 }
 
 .modal {
@@ -452,5 +547,3 @@ body {
   color: #666;
   font-style: italic;
 }
-
-

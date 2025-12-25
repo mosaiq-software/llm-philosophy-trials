@@ -52,4 +52,21 @@
     - Highlight/comment system
     - Save/publish chats
         - Currently chats are fully static, unable to be saved in the database
-- **Again recommended to wait to test until the above features are fully implemented, next push within a day!
+
+# V0.7 - 12/24/25 - Index Frontend Complete & Usable
+
+- All frontend features of `index.html` implemented, future edits will involve
+    - Mapping the "save chat" and "publish chat" buttons to the respective endpoint
+    - General styling changes:
+        - Popover can sometimes appear off page or out of the section bounds
+        - Tooltips (which appear when hovering over a highlight to show the comment) sometimes get covered by their parent `<div>`
+    - System prompt to better prepare the models for their task
+- Otherwise, the app is in a usable state!
+    - To test, you will need to supply your own OpenRouter API key, and credentials for an email service (to skip, you can manually add a `User` to the database with a POST request, set `verified` to true)
+
+- NOTE: Project development will be paused for other duties at Mosaiq, work will resume soon!
+- Release to production is expected by the end of January
+- Features left:
+    - "Saved chats" and "Examples" pages
+    - Database communication (chats are currently stored within the current session, no state is saved after the tab is closed)
+    - General styling (as described above)

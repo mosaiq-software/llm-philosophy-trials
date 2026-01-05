@@ -1,3 +1,57 @@
+function logout() {
+    console.log('[DEBUG] Logout initiated');
+    fetch('/auth/logout', {
+        method: 'POST',
+        credentials: 'include'
+    }).then(() => {
+        console.log('[DEBUG] Backend logout successful');
+
+        // Clear the cookie client-side, maybe , we want to use it in the future, i will just put it here
+        document.cookie = "access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
+
+        // Clear localStorage
+        localStorage.removeItem('access_token');
+        console.log('[DEBUG] Cookie and localStorage cleared, redirecting to login');
+
+        // Redirect to login
+        window.location.href = "/login";
+    }).catch(error => {
+        console.error('[DEBUG] Logout error:', error);
+        
+        // Still redirect even if endpoint fails
+        document.cookie = "access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
+        localStorage.removeItem('access_token');
+        window.location.href = "/login";
+    });
+}
+
+async function checkUserStatus() {
+    try {
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        
+        // Add localStorage token to Authorization header if it exists
+        const localStorageToken = localStorage.getItem('access_token');
+        if (localStorageToken) {
+            headers['Authorization'] = `Bearer ${localStorageToken}`;
+        }
+        
+        const response = await fetch('/api/v1/auth/me', {
+            method: 'GET',
+            credentials: 'include',
+            headers: headers
+        });
+        const data = await response.json();
+        console.log('[DEBUG] User status response:', data);
+        
+        return data;
+    } catch (error) {
+        console.error('[DEBUG] Error checking user status:', error);
+        return { is_logged_in: false, user: null };
+    }
+}
+
 const divider = document.querySelector(".divider");
 const left = document.querySelector(".left");
 const right = document.querySelector(".right");
@@ -679,3 +733,31 @@ function adjustHighlightIndices(start, end, existingHighlights) {
 
     return { start: newStart, end: newEnd };
 }
+
+const cookies = document.cookie.split(';').map(c => c.trim());
+const accessTokenCookie = cookies.find(c => c.startsWith('access_token='));
+const localStorageToken = localStorage.getItem('access_token');
+
+console.log('Token (cookies):', accessTokenCookie ? accessTokenCookie.substring(0, 80) + '...' : 'No token in cookies');
+console.log('Token (localStorage):', localStorageToken ? localStorageToken.substring(0, 80) + '...' : 'No token in localStorage');
+
+checkUserStatus().then(userStatus => {
+    console.log('User:', userStatus);
+    
+    if (userStatus.is_logged_in && userStatus.user) {
+        const userMenu = document.querySelector('.user-menu');
+        if (userMenu) {
+            userMenu.innerHTML = `
+                <span title="${userStatus.user.pseudonym}">${userStatus.user.pseudonym}</span>
+                <button class="btn-logout" onclick="logout()">Logout</button>
+            `;
+            console.log('[UI] Updated user menu with:', userStatus.user.pseudonym);
+        }
+    } else {
+        const userMenu = document.querySelector('.user-menu');
+        if (userMenu) {
+            userMenu.innerHTML = `<button class="btn-nav" onclick="window.open('/login', '_self')">Login</button>`;
+            console.log('[UI] Updated user menu to show Login button');
+        }
+    }
+});

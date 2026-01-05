@@ -5,6 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LLM Philosophy Trial</title>
     <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}">
+    <style>
+        .user-menu {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .user-menu span {
+            font-weight: 500;
+            color: #333;
+            max-width: 150px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .user-menu .btn-logout {
+            background-color: #dc3545;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.3s;
+        }
+        .user-menu .btn-logout:hover {
+            background-color: #c82333;
+        }
+    </style>
 </head>
 
 <body>
@@ -17,7 +46,14 @@
             <button class="btn-nav" onclick="window.open('/examples', '_self')">Examples</button>
             <button class="btn-nav" onclick="window.open('/saved-chats', '_self')">Saved Chats</button>
             <button class="btn-info" id="infoBtn">About</button>
-            <div class="user-menu">AA</div>
+            <div class="user-menu">
+                {% if user %}
+                    <span title="{{ user.pseudonym }}">{{ user.pseudonym }}</span>
+                    <button class="btn-logout" onclick="logout()">Logout</button>
+                {% else %}
+                    <button class="btn-nav" onclick="window.open('/login', '_self')">Login</button>
+                {% endif %}
+            </div>
         </div>
     </div>
 

@@ -28,7 +28,7 @@ from openai import OpenAI
 from config import Config as conf
 
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token", auto_error=False)
 templates = Jinja2Templates(directory="app/templates")
 router = APIRouter()
@@ -49,9 +49,11 @@ def get_db():
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     payload = data.copy()
-    expire = datetime.now() + (expires_delta or timedelta(minutes=conf.ACCESS_TOKEN_EXPIRE_MINUTES))
-    payload.update({"exp": expire})
-    return jwt.encode(payload, conf.JWT_SECRET, algorithm=conf.JWT_ALGORITHM)
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=conf.ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire_timestamp = int(expire.timestamp())
+    payload.update({"exp": expire_timestamp})
+    token = jwt.encode(payload, conf.JWT_SECRET, algorithm=conf.JWT_ALGORITHM)
+    return token
 
 
 def hash_password(password: str) -> str:
@@ -87,7 +89,7 @@ def save_verification_token(db: Session, user_id: int, expires_minutes: int = 60
     record = db_models.EmailVerificationToken(
         user_id=user_id,
         token=code,
-        expires_at=datetime.now() + timedelta(minutes=expires_minutes),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=expires_minutes),
         used=False,
     )
     db.add(record)
@@ -212,8 +214,8 @@ def get_current_user(
 # Optional version used for page rendering, so that the user can be redirected rather than errored
 def get_current_user_optional(
     request: Request,
-    token: Optional[str] = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
+    token: Optional[str] = Depends(oauth2_scheme),
 ) -> Optional[db_models.User]:
     if token is None:
         token = request.cookies.get("access_token")
@@ -222,18 +224,23 @@ def get_current_user_optional(
     try:
         payload = jwt.decode(token, conf.JWT_SECRET, algorithms=[conf.JWT_ALGORITHM])
         user_id: str = payload.get("sub")
-    except JWTError:
+        if user_id is None:
+            return None
+        user = db.get(db_models.User, int(user_id))
+        return user
+    except JWTError as e:
         return None
-    return db.get(db_models.User, int(user_id))
+    except Exception as e:
+        return None
 
 
 # -------------------- Auth --------------------
 
 
-@router.post("/auth/signup", response_model=schemas.UserRead, status_code=status.HTTP_201_CREATED)
-def signup(background_tasks: BackgroundTasks, email: EmailStr = Form(...), password: str = Form(...), pseudonym: str = Form(...), db: Session = Depends(get_db),):
+@router.post("/auth/signup")
+def signup(background_tasks: BackgroundTasks, email: str = Form(...), password: str = Form(...), pseudonym: str = Form(...), db: Session = Depends(get_db),):
     if get_user_by_email(db, email):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+        return RedirectResponse(url="/signup?error=Email+already+registered", status_code=status.HTTP_303_SEE_OTHER)
 
     user = db_models.User(
         email=email,
@@ -247,31 +254,60 @@ def signup(background_tasks: BackgroundTasks, email: EmailStr = Form(...), passw
 
     code = save_verification_token(db, user_id=user.id)
     background_tasks.add_task(send_verification_email, user.email, code)
-    return schemas.UserRead.model_validate(user)
+    return RedirectResponse(url="/verify", status_code=status.HTTP_303_SEE_OTHER)
 
 
-@router.post("/auth/token", response_model=schemas.Token)
+@router.post("/auth/token")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = get_user_by_email(db, form_data.username)
+    if user is None:
+        return RedirectResponse(url="/login?error=Incorrect+email", status_code=status.HTTP_303_SEE_OTHER)
+    if not verify_password(form_data.password, user.password_hash):
+        return RedirectResponse(url="/login?error=Incorrect+password", status_code=status.HTTP_303_SEE_OTHER)
+
+    if not user.verified:
+        return RedirectResponse(url="/login?error=Email+not+verified", status_code=status.HTTP_303_SEE_OTHER)
+
+    access_token = create_access_token(
+    data={"sub": str(user.id), "email": user.email}
+)
+
+    response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,  
+        samesite="lax",
+        secure=False,
+        path="/",
+    )
+    return response
+
+
+@router.post("/api/v1/auth/login")
+def api_login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = get_user_by_email(db, form_data.username)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email")
     if not verify_password(form_data.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password")
-
     if not user.verified:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Email not verified")
 
-    access_token = create_access_token(data={"sub": str(user.id), "email": user.email})
-    response_payload = schemas.Token(access_token=access_token)
-    response = JSONResponse(content=response_payload.model_dump())
-    response.set_cookie(
-        key="access_token",
-        value=access_token,
-        httponly=True,
-        samesite="lax",
-        secure=False,
+    access_token = create_access_token(
+        data={"sub": str(user.id), "email": user.email}
     )
-    return response
+
+    return JSONResponse({
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "pseudonym": user.pseudonym,
+            "verified": user.verified
+        }
+    })
 
 
 @router.post("/auth/verify")
@@ -283,7 +319,7 @@ def verify_email(code: str = Form(...), db: Session = Depends(get_db)):
     )
     if record is None or record.used:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid verification code")
-    if record.expires_at < datetime.now():
+    if record.expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification code expired")
 
     user = db.get(db_models.User, record.user_id)
@@ -293,7 +329,30 @@ def verify_email(code: str = Form(...), db: Session = Depends(get_db)):
     user.verified = True
     record.used = True
     db.commit()
-    return {"detail": "Verification successful"}
+    return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/auth/logout")
+def logout(response: JSONResponse = JSONResponse({"success": True})):
+    return response
+
+
+@router.get("/api/v1/auth/me")
+def get_current_user_info(
+    db: Session = Depends(get_db),
+    current_user: Optional[db_models.User] = Depends(get_current_user_optional),
+):
+    if current_user is None:
+        return JSONResponse({"is_logged_in": False, "user": None})
+    return JSONResponse({
+        "is_logged_in": True,
+        "user": {
+            "id": current_user.id,
+            "email": current_user.email,
+            "pseudonym": current_user.pseudonym,
+            "verified": current_user.verified,
+        }
+    })
 
 
 # -------------------- Pages --------------------
@@ -304,9 +363,31 @@ async def home(
     request: Request,
     current_user: Optional[db_models.User] = Depends(get_current_user_optional),
 ):
-    if current_user is None:
-        return RedirectResponse(url="/examples", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
-    return templates.TemplateResponse("index.html", {"request": request, "user": current_user, "models": models_list}) # Parse 'models_list' before returning so that only the model_id and pretty_name are returned, the api_name is not needed by the frontend
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "user": current_user,
+            "models": models_list,
+        }
+    )
+
+
+@router.get("/signup", response_class=HTMLResponse)
+async def signup_page(request: Request):
+    error = request.query_params.get("error")
+    return templates.TemplateResponse("signup.html", {"request": request, "error": error})
+
+
+@router.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    error = request.query_params.get("error")
+    return templates.TemplateResponse("login.html", {"request": request, "error": error})
+
+
+@router.get("/verify", response_class=HTMLResponse)
+async def verify_page(request: Request):
+    return templates.TemplateResponse("verify.html", {"request": request})
 
 
 # Grab every Chat from the database with 'is_public' set to true, return in the template
